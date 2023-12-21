@@ -1,21 +1,22 @@
-#include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 
+#include <raylib.h>
+
 #define QUADTREE_POINT_CAPACITY 5
 
 struct point {
-    float x;
-    float y;
+    int x;
+    int y;
 };
 
 struct rect {
-    float x;
-    float y;
-    float w;
-    float h;
+    int x;
+    int y;
+    int w;
+    int h;
 };
 
 struct quadtree {
@@ -108,8 +109,8 @@ bool rect_outside_rect(struct rect first, struct rect second) {
 }
 
 void quadtree_subdivide(struct quadtree *quadtree) {
-    float sub_w = quadtree->boundary.w / 2;
-    float sub_h = quadtree->boundary.h / 2;
+    int sub_w = quadtree->boundary.w / 2;
+    int sub_h = quadtree->boundary.h / 2;
     struct rect par_boundary = quadtree->boundary;
     quadtree->north_west = quadtree_new((struct rect){ .x = par_boundary.x - sub_w / 2, .y = par_boundary.y + sub_h / 2, .w = sub_w, .h = sub_h });
     quadtree->north_east = quadtree_new((struct rect){ .x = par_boundary.x + sub_w / 2, .y = par_boundary.y + sub_h / 2, .w = sub_w, .h = sub_h });
@@ -122,7 +123,7 @@ bool quadtree_insert(struct quadtree *quadtree, struct point point) { // NOLINT(
         return false;
     }
 
-    if (quadtree->taken <= quadtree->capacity && quadtree->north_west == NULL) {
+    if (quadtree->taken < quadtree->capacity && quadtree->north_west == NULL) {
         quadtree->points[quadtree->taken] = point;
         quadtree->taken += 1;
         return true;
@@ -162,26 +163,59 @@ void quadtree_query_range(struct quadtree *quadtree, struct rect range, struct p
     quadtree_query_range(quadtree->south_east, range, found);
 }
 
+void quadtree_draw(struct quadtree *quadtree) { // NOLINT(*-no-recursion)
+    struct rect boundary = quadtree->boundary;
+    DrawRectangleLines(boundary.x - boundary.w/2, boundary.y - boundary.h/2, boundary.w, boundary.h, WHITE);
+    for (size_t i=0;i<quadtree->taken;i++) {
+        struct point point = quadtree->points[i];
+        DrawCircle(point.x, point.y, 1.0f, WHITE);
+    }
+
+    if (quadtree->north_west != NULL) {
+        quadtree_draw(quadtree->north_west);
+        quadtree_draw(quadtree->north_east);
+        quadtree_draw(quadtree->south_west);
+        quadtree_draw(quadtree->south_east);
+    }
+}
+
+void quadtree_query_result_draw(struct rect range, struct point_list *result) {
+    DrawRectangleLines(range.x - range.w/2, range.y - range.h/2, range.w, range.h, GREEN);
+    for (size_t i=0;i<result->length;i++) {
+        struct point point = result->points[i];
+        DrawCircle(point.x, point.y, 1.5f, LIME);
+    }
+}
+
 int main() {
-    struct rect world_boundary = { .x = 10, .y = 10, .w = 100, .h = 100 };
+    InitWindow(800, 800, "SimpleQuadTree");
+
+    struct rect world_boundary = { .x = 400, .y = 400, .w = 800, .h = 800 };
     struct quadtree *world_quadtree = quadtree_new(world_boundary);
     for (size_t i=0;i<1000;i++) {
         struct point point = {
-                .x = rand() % (int)world_boundary.w,  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
-                .y = rand() % (int)world_boundary.h,  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
+                .x = GetRandomValue(0, world_boundary.w),  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
+                .y = GetRandomValue(0, world_boundary.h),  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
                 };
         quadtree_insert(world_quadtree, point);
     }
 
     struct point_list *result = point_list_new(100);
-    struct rect query = { 5, 5, 50, 50 };
+    struct rect query = { 120, 120, 155, 155 };
     quadtree_query_range(world_quadtree, query, result);
-    for (size_t i=0;i<result->length;i++) {
-        struct point point = result->points[i];
-        printf("found point: (%.4f, %.4f)\n", point.x, point.y);
+
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        {
+            ClearBackground(BLACK);
+            quadtree_draw(world_quadtree);
+            quadtree_query_result_draw(query, result);
+        }
+        EndDrawing();
     }
 
     point_list_free(result);
     quadtree_free(world_quadtree);
+    CloseWindow();
     return 0;
 }
