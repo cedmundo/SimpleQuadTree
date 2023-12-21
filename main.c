@@ -6,6 +6,8 @@
 #include <raylib.h>
 
 #define QUADTREE_POINT_CAPACITY 5
+#define QUADTREE_MIN_WIDTH 1
+#define QUADTREE_MIN_HEIGHT 1
 
 struct point {
     int x;
@@ -52,11 +54,10 @@ void point_list_free(struct point_list *list) {
 }
 
 void point_list_push(struct point_list *list, struct point point) {
-    if (list->length >= list->capacity) {
-        struct point *expanded = realloc(list->points, list->capacity * 2);
-        assert(expanded != NULL && "error: not enough memory!");
-        memset(expanded + list->capacity * sizeof(struct point), 0L, list->capacity);
-        list->capacity *= 2;
+    if (list->length >= list->capacity-1) {
+        struct point *expanded = realloc(list->points, sizeof(struct point) * list->capacity * 2);
+        list->points = expanded;
+        list->capacity += list->capacity;
     }
 
     list->points[list->length] = point;
@@ -108,9 +109,15 @@ bool rect_outside_rect(struct rect first, struct rect second) {
     );
 }
 
-void quadtree_subdivide(struct quadtree *quadtree) {
+bool quadtree_subdivide(struct quadtree *quadtree) {
     int sub_w = quadtree->boundary.w / 2;
     int sub_h = quadtree->boundary.h / 2;
+    if (sub_w < QUADTREE_MIN_WIDTH || sub_h < QUADTREE_MIN_HEIGHT) {
+        TraceLog(LOG_ERROR, "cannot subdivide quadtree! (%d %d %d %d)",
+                 quadtree->boundary.x, quadtree->boundary.y, quadtree->boundary.w, quadtree->boundary.h);
+        return false;
+    }
+
     struct rect par_boundary = quadtree->boundary;
     quadtree->north_west = quadtree_new(
             (struct rect) {.x = par_boundary.x - sub_w / 2, .y = par_boundary.y + sub_h / 2, .w = sub_w, .h = sub_h});
@@ -120,6 +127,7 @@ void quadtree_subdivide(struct quadtree *quadtree) {
             (struct rect) {.x = par_boundary.x - sub_w / 2, .y = par_boundary.y - sub_h / 2, .w = sub_w, .h = sub_h});
     quadtree->south_east = quadtree_new(
             (struct rect) {.x = par_boundary.x + sub_w / 2, .y = par_boundary.y - sub_h / 2, .w = sub_w, .h = sub_h});
+    return true;
 }
 
 bool quadtree_insert(struct quadtree *quadtree, struct point point) { // NOLINT(*-no-recursion)
@@ -134,7 +142,10 @@ bool quadtree_insert(struct quadtree *quadtree, struct point point) { // NOLINT(
     }
 
     if (quadtree->north_west == NULL) {
-        quadtree_subdivide(quadtree);
+        if (!quadtree_subdivide(quadtree)) {
+            TraceLog(LOG_ERROR, "cannot insert new point: (%d %d)", point.x, point.y);
+            return false;
+        }
     }
 
     return (
@@ -196,31 +207,57 @@ int main() {
     InitWindow(800, 800, "SimpleQuadTree");
 
     struct rect world_boundary = {.x = 400, .y = 400, .w = 800, .h = 800};
-    struct quadtree *world_quadtree = quadtree_new(world_boundary);
-    for (size_t i = 0; i < 1000; i++) {
-        struct point point = {
-                .x = GetRandomValue(0, world_boundary.w),  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
-                .y = GetRandomValue(0, world_boundary.h),  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
-        };
-        quadtree_insert(world_quadtree, point);
-    }
+    SetTargetFPS(60);
 
-    struct point_list *result = point_list_new(100);
-    struct rect query = {120, 120, 155, 155};
-    quadtree_query_range(world_quadtree, query, result);
-
+    struct point_list *saved_points = point_list_new(5);
+    struct point query_center = { 120, 120 };
+    struct point query_size = { 90, 90 };
+    float last_inserted_point_time = 0.0f;
     while (!WindowShouldClose()) {
         BeginDrawing();
         {
+            // Add points to saved instances
+            last_inserted_point_time += GetFrameTime();
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && last_inserted_point_time >= 0.01f) {
+                point_list_push(saved_points, (struct point) {GetMouseX(), GetMouseY() });
+                last_inserted_point_time = 0.0f;
+            }
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+                query_center.x = GetMouseX();
+                query_center.y = GetMouseY();
+            }
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+                query_size.x = abs(GetMouseX() - query_center.x) * 2;
+                query_size.y = abs(GetMouseY() - query_center.y) * 2;
+            }
+
+            // Create quadtree (each frame)
+            struct quadtree *world_quadtree = quadtree_new(world_boundary);
+            for (int i=0; i < saved_points->length; i++) {
+                struct point point = saved_points->points[i];
+                quadtree_insert(world_quadtree, point);
+            }
+
+            // Query quadtree (each frame)
+            struct point_list *result = point_list_new(100);
+            struct rect query = {query_center.x, query_center.y, query_size.x, query_size.y};
+            quadtree_query_range(world_quadtree, query, result);
+
+            // Draw quadtree and query result
+            DrawFPS(0, 0);
             ClearBackground(BLACK);
             quadtree_draw(world_quadtree);
             quadtree_query_result_draw(query, result);
+
+            // Free memory for quadtree and result
+            point_list_free(result);
+            quadtree_free(world_quadtree);
         }
         EndDrawing();
     }
 
-    point_list_free(result);
-    quadtree_free(world_quadtree);
     CloseWindow();
     return 0;
 }
