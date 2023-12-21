@@ -112,10 +112,14 @@ void quadtree_subdivide(struct quadtree *quadtree) {
     int sub_w = quadtree->boundary.w / 2;
     int sub_h = quadtree->boundary.h / 2;
     struct rect par_boundary = quadtree->boundary;
-    quadtree->north_west = quadtree_new((struct rect){ .x = par_boundary.x - sub_w / 2, .y = par_boundary.y + sub_h / 2, .w = sub_w, .h = sub_h });
-    quadtree->north_east = quadtree_new((struct rect){ .x = par_boundary.x + sub_w / 2, .y = par_boundary.y + sub_h / 2, .w = sub_w, .h = sub_h });
-    quadtree->south_west = quadtree_new((struct rect){ .x = par_boundary.x - sub_w / 2, .y = par_boundary.y - sub_h / 2, .w = sub_w, .h = sub_h });
-    quadtree->south_east = quadtree_new((struct rect){ .x = par_boundary.x + sub_w / 2, .y = par_boundary.y - sub_h / 2, .w = sub_w, .h = sub_h });
+    quadtree->north_west = quadtree_new(
+            (struct rect) {.x = par_boundary.x - sub_w / 2, .y = par_boundary.y + sub_h / 2, .w = sub_w, .h = sub_h});
+    quadtree->north_east = quadtree_new(
+            (struct rect) {.x = par_boundary.x + sub_w / 2, .y = par_boundary.y + sub_h / 2, .w = sub_w, .h = sub_h});
+    quadtree->south_west = quadtree_new(
+            (struct rect) {.x = par_boundary.x - sub_w / 2, .y = par_boundary.y - sub_h / 2, .w = sub_w, .h = sub_h});
+    quadtree->south_east = quadtree_new(
+            (struct rect) {.x = par_boundary.x + sub_w / 2, .y = par_boundary.y - sub_h / 2, .w = sub_w, .h = sub_h});
 }
 
 bool quadtree_insert(struct quadtree *quadtree, struct point point) { // NOLINT(*-no-recursion)
@@ -141,12 +145,13 @@ bool quadtree_insert(struct quadtree *quadtree, struct point point) { // NOLINT(
     );
 }
 
-void quadtree_query_range(struct quadtree *quadtree, struct rect range, struct point_list *found) { // NOLINT(*-no-recursion)
+void
+quadtree_query_range(struct quadtree *quadtree, struct rect range, struct point_list *found) { // NOLINT(*-no-recursion)
     if (rect_outside_rect(quadtree->boundary, range)) {
         return;
     }
 
-    for (size_t i=0;i<quadtree->taken;i++) {
+    for (size_t i = 0; i < quadtree->taken; i++) {
         struct point point = quadtree->points[i];
         if (rect_contains_point(range, point)) {
             point_list_push(found, point);
@@ -165,8 +170,8 @@ void quadtree_query_range(struct quadtree *quadtree, struct rect range, struct p
 
 void quadtree_draw(struct quadtree *quadtree) { // NOLINT(*-no-recursion)
     struct rect boundary = quadtree->boundary;
-    DrawRectangleLines(boundary.x - boundary.w/2, boundary.y - boundary.h/2, boundary.w, boundary.h, WHITE);
-    for (size_t i=0;i<quadtree->taken;i++) {
+    DrawRectangleLines(boundary.x - boundary.w / 2, boundary.y - boundary.h / 2, boundary.w, boundary.h, WHITE);
+    for (size_t i = 0; i < quadtree->taken; i++) {
         struct point point = quadtree->points[i];
         DrawCircle(point.x, point.y, 1.0f, WHITE);
     }
@@ -180,8 +185,8 @@ void quadtree_draw(struct quadtree *quadtree) { // NOLINT(*-no-recursion)
 }
 
 void quadtree_query_result_draw(struct rect range, struct point_list *result) {
-    DrawRectangleLines(range.x - range.w/2, range.y - range.h/2, range.w, range.h, GREEN);
-    for (size_t i=0;i<result->length;i++) {
+    DrawRectangleLines(range.x - range.w / 2, range.y - range.h / 2, range.w, range.h, GREEN);
+    for (size_t i = 0; i < result->length; i++) {
         struct point point = result->points[i];
         DrawCircle(point.x, point.y, 1.5f, LIME);
     }
@@ -190,18 +195,18 @@ void quadtree_query_result_draw(struct rect range, struct point_list *result) {
 int main() {
     InitWindow(800, 800, "SimpleQuadTree");
 
-    struct rect world_boundary = { .x = 400, .y = 400, .w = 800, .h = 800 };
+    struct rect world_boundary = {.x = 400, .y = 400, .w = 800, .h = 800};
     struct quadtree *world_quadtree = quadtree_new(world_boundary);
-    for (size_t i=0;i<1000;i++) {
+    for (size_t i = 0; i < 1000; i++) {
         struct point point = {
                 .x = GetRandomValue(0, world_boundary.w),  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
                 .y = GetRandomValue(0, world_boundary.h),  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
-                };
+        };
         quadtree_insert(world_quadtree, point);
     }
 
     struct point_list *result = point_list_new(100);
-    struct rect query = { 120, 120, 155, 155 };
+    struct rect query = {120, 120, 155, 155};
     quadtree_query_range(world_quadtree, query, result);
 
     while (!WindowShouldClose()) {
