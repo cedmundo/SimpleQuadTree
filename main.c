@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-#include <raylib.h>
+#include <assert.h>
+#include <string.h>
 
 #define QUADTREE_POINT_CAPACITY 5
 
@@ -28,6 +28,39 @@ struct quadtree {
     size_t capacity;
     size_t taken;
 };
+
+struct point_list {
+    struct point *points;
+    size_t capacity;
+    size_t length;
+};
+
+struct point_list *point_list_new(size_t default_capacity) {
+    struct point_list *list = calloc(1, sizeof(struct point_list));
+    list->points = calloc(default_capacity, sizeof(struct point));
+    list->capacity = default_capacity;
+    return list;
+}
+
+void point_list_free(struct point_list *list) {
+    if (list->points != NULL) {
+        free(list->points);
+    }
+
+    free(list);
+}
+
+void point_list_push(struct point_list *list, struct point point) {
+    if (list->length >= list->capacity) {
+        struct point *expanded = realloc(list->points, list->capacity * 2);
+        assert(expanded != NULL && "error: not enough memory!");
+        memset(expanded + list->capacity * sizeof(struct point), 0L, list->capacity);
+        list->capacity *= 2;
+    }
+
+    list->points[list->length] = point;
+    list->length += 1;
+}
 
 struct quadtree *quadtree_new(struct rect boundary) {
     struct quadtree *quadtree = calloc(1, sizeof(struct quadtree));
@@ -107,10 +140,32 @@ bool quadtree_insert(struct quadtree *quadtree, struct point point) { // NOLINT(
     );
 }
 
+void quadtree_query_range(struct quadtree *quadtree, struct rect range, struct point_list *found) { // NOLINT(*-no-recursion)
+    if (rect_outside_rect(quadtree->boundary, range)) {
+        return;
+    }
+
+    for (size_t i=0;i<quadtree->taken;i++) {
+        struct point point = quadtree->points[i];
+        if (rect_contains_point(range, point)) {
+            point_list_push(found, point);
+        }
+    }
+
+    if (quadtree->north_west == NULL) {
+        return;
+    }
+
+    quadtree_query_range(quadtree->north_west, range, found);
+    quadtree_query_range(quadtree->north_east, range, found);
+    quadtree_query_range(quadtree->south_west, range, found);
+    quadtree_query_range(quadtree->south_east, range, found);
+}
+
 int main() {
-    struct rect world_boundary = { .x = 500, .y = 500, .w = 1000, .h = 1000 };
+    struct rect world_boundary = { .x = 10, .y = 10, .w = 100, .h = 100 };
     struct quadtree *world_quadtree = quadtree_new(world_boundary);
-    for (int i=0;i<1;i++) {
+    for (size_t i=0;i<1000;i++) {
         struct point point = {
                 .x = rand() % (int)world_boundary.w,  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
                 .y = rand() % (int)world_boundary.h,  // NOLINT(*-narrowing-conversions, *-msc50-cpp)
@@ -118,6 +173,15 @@ int main() {
         quadtree_insert(world_quadtree, point);
     }
 
+    struct point_list *result = point_list_new(100);
+    struct rect query = { 5, 5, 50, 50 };
+    quadtree_query_range(world_quadtree, query, result);
+    for (size_t i=0;i<result->length;i++) {
+        struct point point = result->points[i];
+        printf("found point: (%.4f, %.4f)\n", point.x, point.y);
+    }
+
+    point_list_free(result);
     quadtree_free(world_quadtree);
     return 0;
 }
